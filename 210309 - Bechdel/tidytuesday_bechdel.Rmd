@@ -1,0 +1,373 @@
+---
+title: "TidyTuesday - Bechdel Test"
+output: html_notebook
+---
+
+## TidyTuesday - 9 March 2021
+The dataset is loaded from the tidytuesdayR package
+
+```{r import_data_packages}
+library(tidytuesdayR)
+library(summarytools)
+library(tidyverse)
+library(dplyr)
+
+# Load data
+tuesdata <- tidytuesdayR::tt_load('2021-03-09')
+tuesdata <- tidytuesdayR::tt_load(2021, week = 11)
+
+bechdel <- tuesdata$movies
+
+head(bechdel)
+
+```
+
+### The dataset
+The dataset contains 1,794 observations and 23 variables
+
+```{r viewdataset}
+library(summarytools)
+
+view(dfSummary(bechdel), method = 'render')
+
+```
+### Selecting a dataset for analysis
+
+The following variables will be retained for analysis:
+
+- year
+
+- title
+
+- clean_test
+
+- binary
+
+- budget_2013
+
+- domgross_2013
+
+- intgross_2013
+
+- period_code
+
+- decade_code
+
+- rated
+
+- metascore
+
+- imdb_rating
+
+- genre
+
+```{r select_short}
+bechdel_short <- bechdel %>%
+  select(year, title, clean_test, binary, budget_2013, domgross_2013, intgross_2013, period_code, decade_code, rated, metascore, imdb_rating, genre)
+```
+
+### Investigate `clean_test` variable
+
+- The values: "dubious", "men", "notalk" and "nowomen" all represent Bechdel test failures
+
+- "ok" represents a Bechdel test pass
+
+- The variable needs to be converted into a factor with the following order:
+  - 1. No women
+  - 2. No talk
+  - 3. Men
+  - 4. Dubious
+  - 5. OK
+
+```{r clean_test}
+
+clean_test_levels <- c("nowomen", "notalk",
+                       "men", "dubious", "ok")
+
+bechdel_short <- bechdel_short %>%
+  mutate(clean_test = factor(clean_test, levels = clean_test_levels))
+
+ggplot(bechdel_short,
+       aes(x = clean_test, fill = binary)) +
+  geom_bar()
+
+```
+
+### Relationship between clean_test and year
+The number of observations significant increases after 1995, so its difficult to tell how the distribution changes by year
+
+```{r}
+ggplot(bechdel_short, aes(x = year, fill = clean_test)) +
+  geom_histogram(binwidth = 5)
+```
+
+### Understanding period codes
+
+- Period 1 = 2010-2013 (c. 400 obs)
+
+- Period 2 = 2005-2009 (c. 500 obs)
+
+- Period 3 = 2000-2004 (c. 350 obs)
+
+- Period 4 = 1995-1999 (c. 250 obs)
+ 
+- Period 5 = 1990-1994 (c. 90 obs)
+
+- Period NA = 1970-1989 (c. 180 obs)
+
+```{r}
+bechdel_short %>%
+  select(period_code, year) %>%
+  group_by(period_code) %>%
+  summarize(min_year = min(year), max_year = max(year), count = n())
+
+```
+### Relationship between clean_test and period_code
+
+- The proportion of films that passed the BT increased from period 5 (1990 - 1994) to period 3 (2000 to 2004), after which the proportion has been declining
+
+```{r period_code}
+ggplot(bechdel_short, aes(x = period_code, fill = clean_test)) +
+  geom_bar(position = "fill")
+```
+
+### Relationship between clean_test and budget_2013
+- Films that pass the Bechdel Test tend to have slightly lower budgets than those that don't - particularly those that fewer than 2 women, or where women don't talk to each other
+
+```{r budget_2013}
+ggplot(bechdel_short, aes(x = clean_test, y = budget_2013)) +
+  geom_boxplot() +
+  scale_y_log10()
+```
+
+### Relationship between clean_test and domgross_2013
+- There doesn't appear to be obvious differences between BT categories and domestic gross in 2013 currency
+
+```{r domgross_2013}
+ggplot(bechdel_short, aes(x = clean_test, y = as.numeric(domgross_2013))) +
+  geom_boxplot() +
+  scale_y_log10()
+```
+
+### Relationship between clean_test and intgross_2013
+- There doesn't appear to be obvious differences between BT categories and international gross in 2013 currency
+
+```{r intgross_2013}
+ggplot(bechdel_short, aes(x = clean_test, y = as.numeric(intgross_2013))) +
+  geom_boxplot() +
+  scale_y_log10()
+```
+
+### Relationship between clean_test and rated (where rated is PG, PG-13, or R)
+- Films that are PG or PG-13 are more likely to pass or closely pass (dubious) the Bechdel Test
+
+```{r rated}
+bechdel_short_rated <- bechdel_short %>%
+  filter(rated %in% c("PG", "PG-13", "R"))
+
+ggplot(bechdel_short_rated, aes(x = rated, fill = clean_test)) +
+  geom_bar(position = "fill")
+
+```
+
+### Relationship between clean_test and metascore
+- There is no clear relationship between `clean_test` and `metascore`
+
+```{r metascore}
+ggplot(bechdel_short, aes(x = clean_test, y = metascore)) +
+  geom_boxplot()
+```
+
+#### Relationship between clean_test and imdb_rating
+- There some evidence that films that pass or almost pass ("dubious") the Bechdel Test have a lower imdb rating
+
+```{r imdb_rating}
+ggplot(bechdel_short, aes(x = clean_test, y = imdb_rating)) +
+  geom_boxplot()
+```
+
+### Use of the genre variable
+- This variable needs further cleaning before it can be used in analysis
+
+- The column contains multiple genres separated by commas
+
+- Max number of genres = 3
+
+```{r genre}
+bechdel_short_genres <- bechdel_short %>%
+  group_by(genre) %>%
+  summarize(count = n())
+
+bechdel_short_genres$commas <- str_count(bechdel_short_genres$genre, pattern = ",")
+
+bechdel_short_genres %>%
+  group_by(commas) %>%
+  summarize(max(commas))
+
+bechdel_short_genres
+```
+### The relationship between year, imdb_rating and Bechdel test
+
+```{r year_rating}
+ggplot(bechdel_short, aes(x = year, y = imdb_rating, color = binary)) +
+  geom_point(position = "jitter") +
+  geom_smooth(method = "lm")
+```
+
+### Split genres into columns
+- To compare relationships between genres, each genre observation (which can contain multiple genres) has been split into a separate observation
+
+- This means that some films are contained in the table multiple times, however the maximum number of genres for any given film is 3. As a result, I don't expect this to result in significant bias
+
+```{r genre_split}
+
+# Split genre into 3 columns
+bechdel_genre_split <- separate(bechdel_short, 'genre', 
+                                paste('genre', 1:3, sep="_"), 
+                                sep=",", extra = "warn")
+
+# Create a separate dataframe for genre_1
+genre_1 <- bechdel_genre_split %>%
+  select(-genre_2, -genre_3) %>%
+  mutate(genre = str_trim(genre_1, side = "both")) %>%
+  select(-genre_1)
+
+genre_1
+
+# Create a separate dataframe for genre_2
+genre_2 <- bechdel_genre_split %>%
+  select(-genre_1, -genre_3) %>%
+  mutate(genre = str_trim(genre_2, side = "both")) %>%
+  select(-genre_2)
+
+# Create a separate dataframe for genre_3
+genre_3 <- bechdel_genre_split %>%
+  select(-genre_1, -genre_2) %>%
+  mutate(genre = str_trim(genre_3, side = "both")) %>%
+  select(-genre_3)
+
+# All tables combined
+all_genres <- rbind.data.frame(genre_1, genre_2, genre_3)
+
+all_genres
+
+# Calculate the max, min and median rating by genre, by pass/fail
+genre_data_all <- all_genres %>%
+  group_by(genre) %>%
+  summarize(max_rating = max(imdb_rating), 
+            min_rating = min(imdb_rating), 
+            med_rating = median(imdb_rating),
+            avg_rating = mean(imdb_rating)) %>%
+  arrange(desc(avg_rating)) %>%
+  mutate(genre = factor(genre, levels = genre))
+
+genre_data_pass <- all_genres %>%
+  group_by(genre, binary) %>%
+  summarize(max_rating = max(imdb_rating), 
+            min_rating = min(imdb_rating), 
+            med_rating = median(imdb_rating),
+            avg_rating = mean(imdb_rating)) %>%
+  filter(binary == "PASS") %>%
+  arrange(desc(avg_rating))
+
+genre_data_fail <- all_genres %>%
+  group_by(genre, binary) %>%
+  summarize(max_rating = max(imdb_rating), 
+            min_rating = min(imdb_rating), 
+            med_rating = median(imdb_rating),
+            avg_rating = mean(imdb_rating)) %>%
+  filter(binary == "FAIL") %>%
+  arrange(desc(avg_rating))
+
+```
+
+```{r genre_chart_all}
+base_plot <- ggplot(genre_data_all, aes(x = genre)) +
+  geom_segment(aes(x = genre, 
+                   xend = genre, 
+                   y = min_rating, 
+                   yend = max_rating),
+               color = "azure3") +
+  geom_point(aes(x = genre, y = min_rating), 
+             color = "firebrick3", size = 3) +
+  geom_point(aes(x = genre, y = max_rating), 
+             color = "aquamarine4", size = 3) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.25, hjust = 1)) +
+  ylab("Minimum and Maximum IMDB rating") +
+  xlab("Genre")
+
+base_plot
+
+  
+```
+
+```{r chart_data}
+# Calculate the max, min and median rating by genre, by pass/fail
+genre_data_chart <- all_genres %>%
+  group_by(genre) %>%
+  filter(genre != "NA") %>%
+  summarize(max_rating = max(imdb_rating),
+            min_rating = min(imdb_rating),
+            avg_pass_rating = mean(imdb_rating[binary == "PASS"]),
+            avg_fail_rating = mean(imdb_rating[binary == "FAIL"]),
+            med_pass_rating = median(imdb_rating[binary == "PASS"]),
+            med_fail_rating = median(imdb_rating[binary == "FAIL"]),
+            avg_rating = mean(imdb_rating),
+            med_rating = median(imdb_rating)) %>%
+  arrange(desc(avg_rating)) %>%
+  mutate(genre = factor(genre, levels = genre))
+  
+
+genre_data_chart
+```
+
+```{r generate_chart}
+genre_chart <- ggplot(genre_data_chart, aes(x = genre)) +
+  # Create the line plots
+  geom_segment(aes(x = genre, 
+                   xend = genre, 
+                   y = min_rating, 
+                   yend = max_rating),
+               color = "gray85") +
+  # Add a point for min rating
+  geom_point(aes(x = genre, y = min_rating), 
+             color = "paleturquoise3", size = 3) +
+  # Add a point for max rating
+  geom_point(aes(x = genre, y = max_rating), 
+             color = "paleturquoise3", size = 3) +
+  # Add a line for the median rating for BT pass films
+  geom_line(aes(y = med_pass_rating, group = 1),
+            color = "aquamarine4", size = 1) +
+  # Add a line for the median rating for BT fail films
+  geom_line(aes(y = med_fail_rating, group = 1),
+            color = "firebrick3", size = 1) +
+  
+  # Set light theme
+  theme_light() +
+  # Rotate x axis labels 90 degrees
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.25, hjust = 1)) +
+  # Remove gridlines
+  theme(panel.grid.major = element_blank()) +
+  theme(panel.grid.minor = element_blank()) +
+  # Add labels for x and y axis
+  labs(x = "Genre", y = "IMDB rating", 
+       title = "Film ratings by Genre \n...and whether they pass the Bechdel Test") +
+  # Add labels for min and max ratings
+  annotate("text", x = "Music", y = 10, 
+           label = "Max rating", size = 3) +
+  annotate("text", x = "Music", y = 2,
+           label = "Min rating", size = 3) +
+  # Add labels for median ratings for BT pass and fail films
+  annotate("text", x = "Comedy", y = 7.25,
+           label = "Median rating - Bechdel fail",
+           size = 3) +
+    annotate("text", x = "Comedy", y = 5.9,
+           label = "Median rating - Bechdel pass",
+           size = 3)
+
+genre_chart
+
+ggsave("tidytues_bechdel.png")
+
+```
+
